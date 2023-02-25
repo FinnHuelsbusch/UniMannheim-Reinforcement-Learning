@@ -50,19 +50,23 @@ P_down = np.array((
 
 # Question 1:
 # compute the state value by matrix inversion
-# compute state value for always choosing up. 
-state_value_function_up = np.linalg.inv(np.identity(8) - 0.9 * P_up) * r[0]
-# compute state value for always choosing down.
-state_value_function_down = np.linalg.inv(np.identity(8) - 0.9 * P_down) * r[1]
-# compute the combined state_value_function
-state_value_function= 0.5 * state_value_function_up + 0.5 * state_value_function_down
-print(state_value_function)
+
+### your code here ###
+pi_up = pi_down = 0.5
+
 # compute state transitions for the 50/50 policy
-...
+state_transitions = P_up*pi_up + P_down*pi_down
+print(state_transitions)
+
 # compute expected rewards for the 50/50 policy
-...
+expected_reward = r[0]*pi_up + r[1]*pi_down
+print(expected_reward)
+
 # compute state values
-...
+state_values = np.linalg.inv(np.identity(8) - gamma*state_transitions) @ expected_reward
+print(state_values)
+
+######################
 ######################
 
 # Question 2:
