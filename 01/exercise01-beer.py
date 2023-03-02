@@ -28,7 +28,7 @@ P_up = np.array ((
     [ 0    , 0  , 0  , 1  , 0  ,  0  , 0  , 0  ],  # Lö    # 
     [ 0    , 0  , 0  , 0  , 0  ,  1  , 0  , 0  ],  # G     # 
     [ 0    , 0  , 0  , 0  , 0  ,  1  , 0  , 0  ],  # B     #  
-    [ 0    , 0  , 0  , 0  , 0  ,  0  , 0  , 1  ],  # Li    # 
+    [ 0    , 0  , 0  , 0  , 0  ,  0  , 0  , 0  ],  # Li    # 
     [ 0    , 0  , 0  , 0  , 0  ,  0  , 0  , 1  ],  # F     # 
     [ 0    , 0  , 0  , 0  , 0  ,  0  , 0  , 1  ],  # End   # 
 )) 
@@ -96,11 +96,62 @@ while not terminate:
             terminate = True
 print(v)
 ######################
-
+print()
+print()
 # Question 3:
 # compute the optimal state values by dynamic programming
 # Determine the number of iterations as for the Richardson iteration
+v = np.zeros(8)
+terminate = False
+while not terminate: 
+    Delta = np.float64(0) 
+    # reversed in order to terminate in one iteration. 
+    for state_index, s in reversed(list(enumerate(v))): # sweep through space by traversing from end to start state
+        v_old = s
+        # Up
+        inner_sum = 0
+        for next_state_index, next_state_prob in enumerate(P_up[state_index]):
+            inner_sum += next_state_prob*v[next_state_index]
+        value_up =  (r[0][state_index] + gamma * inner_sum)
+        # Down 
+        inner_sum = 0
+        for next_state_index, next_state_prob in enumerate(P_down[state_index]):
+            inner_sum += next_state_prob*v[next_state_index]
+        value_down =  (r[1][state_index] + gamma * inner_sum )
+        s = max(value_up, value_down)
+        v[state_index] = s
+        Delta = np.max([Delta, np.abs(s - v_old)])
+        print(state_index, s, v, v_old)
+        # terminate?
+        if Delta < delta:
+            terminate = True
+print(v)
+policy = [None] * 8 
+for state_index, s in reversed(list(enumerate(v))): # sweep through space by traversing from end to start state
+    inner_sum = np.float64('-inf')
+    for next_state_index, next_state_prob in enumerate(P_up[state_index]):
+        test = next_state_prob*v[next_state_index]
+        if test != 0: 
+            if np.isinf(inner_sum):
+                inner_sum = test
+            else: 
+                inner_sum += test
+    value_up =  (r[0][state_index] + gamma * inner_sum)
+    inner_sum = np.float64('-inf')
+    for next_state_index, next_state_prob in enumerate(P_down[state_index]):
+        test = next_state_prob*v[next_state_index] 
+        if test != 0 : 
+            if np.isinf(inner_sum):
+                inner_sum = test
+            else: 
+                inner_sum += test
+        
+    value_down =  (r[1][state_index] + gamma * inner_sum )
+    if value_up <= value_down:
+        policy[state_index] = 'down'
+    else: 
+        policy[state_index] = 'up'
+for index, element in enumerate(['Start', 'A'  , 'LÖ' , 'G'  , 'B'  , 'Li'  , 'F'  , 'End']):
+    print(element, policy[index])
 
-### your code here ###
-...
 ######################
