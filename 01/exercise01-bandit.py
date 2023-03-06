@@ -36,8 +36,8 @@ for i_episode in range(steps):
     # Exploitation: Pick action with highest expected value
 
     def update_exected_value(action):
+        average_rewards[action] = (average_rewards[action] * (nr_steps_per_action[action]) + rewards[-1]) / nr_steps_per_action[action]
         nr_steps_per_action[action]+=1
-        average_rewards[action] = (average_rewards[action] + rewards[-1]) / nr_steps_per_action[action]
 
     # prob of exploration
     k = 30 # exploration prob. decay factor: can be optimized
