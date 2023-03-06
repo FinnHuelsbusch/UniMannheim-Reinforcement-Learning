@@ -18,7 +18,6 @@ average_rewards = np.zeros(env.action_space.n)
 nr_steps_per_action = np.zeros(env.action_space.n)
 
 steps = 2000
-k = 30 # exploration prob. decay factor: can be optimized
 for i_episode in range(steps):
   
     print("episode Number is", i_episode)   
@@ -38,9 +37,10 @@ for i_episode in range(steps):
 
     def update_exected_value(action):
         nr_steps_per_action[action]+=1
-        average_rewards[action] = (average_rewards[action] * (nr_steps_per_action[action]-1) + rewards[-1]) / nr_steps_per_action[action]
+        average_rewards[action] = (average_rewards[action] + rewards[-1]) / nr_steps_per_action[action]
 
     # prob of exploration
+    k = 30 # exploration prob. decay factor: can be optimized
     probability_to_explore = np.exp(-i_episode/(steps/k))
 
     # choose an action

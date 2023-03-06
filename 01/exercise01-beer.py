@@ -56,6 +56,24 @@ pi_up = pi_down = 0.5
 # compute state transitions for the 50/50 policy
 state_transitions = P_up*pi_up + P_down*pi_down
 print(state_transitions)
+
+# compute expected rewards for the 50/50 policy
+expected_reward = r[0]*pi_up + r[1]*pi_down
+print(expected_reward)
+
+# compute state values
+state_values = np.linalg.inv(np.identity(8) - gamma*state_transitions) @ expected_reward
+print(state_values)
+
+######################
+######################
+
+### your code here ###
+pi_up = pi_down = 0.5
+
+# compute state transitions for the 50/50 policy
+state_transitions = P_up*pi_up + P_down*pi_down
+print(state_transitions)
 # compute expected rewards for the 50/50 policy
 expected_reward = r[0]*pi_up + r[1]*pi_down
 print(expected_reward)
