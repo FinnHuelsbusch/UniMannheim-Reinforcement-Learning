@@ -65,7 +65,7 @@ print(expected_rewards)
 # compute state values
 state_values = np.linalg.inv(np.identity(8) - gamma*state_transitions) @ expected_rewards
 print(state_values)
-
+print("------")
 ######################
 ######################
 
@@ -76,18 +76,15 @@ print(state_values)
 ### your code here ###
 accuracy_threshold = 0.001
 
-def richardson_iteration(state_transitions, expected_rewards, gamma):
+def richardson_iteration():
     """
     This is the Richardson Algorithm to iteratively estimate the state value functions. 
     This implementation is asynchronous and in-place.
-    
-    state_transitions: Our state transition matrix
-    expected_rewards: Our expected rewards vector
-    gamma: Our gamma factor
     """
     v_current = np.zeros(8)
     terminate = False
     
+    iteration = 1
     while not terminate:
         delta = np.float64(0)
         
@@ -97,35 +94,38 @@ def richardson_iteration(state_transitions, expected_rewards, gamma):
             v_old = v_cur
             v_current[s_i] = expected_rewards[s_i] + np.sum(gamma * state_transitions[s_i] @ v_current) # v_new
             delta = np.max([delta, np.abs(v_current[s_i] - v_old)]) 
-                        
+        
         # terminate if error small enough
         if delta < accuracy_threshold:
             terminate = True
             
+        print(f"Richardson Iteration {iteration}:")
+        print(v_current)
+        iteration+=1
+            
     return v_current
 
-estimated_state_values = richardson_iteration(state_transitions=state_transitions, expected_rewards=expected_rewards, gamma=gamma)
-print(estimated_state_values)
+estimated_state_values = richardson_iteration()
+print("Richardson Iteration result:", estimated_state_values)
+print("------")
 ######################
 
 # Question 3:
 # compute the optimal state values by dynamic programming
 # Determine the number of iterations as for the Richardson iteration
 ### your code here ###
-def value_iteration(state_transitions_a, rewards_a, gamma):
+def value_iteration():
     """
-    By assumption, this value iteration algorithm returns action "up" as the best action to take
-    when both actions "down" and "up" are equally good and when we can only choose one action (i.e. 'Li' and 'F', 'End')
-    
-    state_transitions: Our state transition matrix
-    expected_rewards: Our expected rewards vector
-    gamma: Our gamma factor
+    By assumption, this value iteration alg. implementation returns the action "up" as the best action to take
+    when there is only one possible action to choose from (i.e. 'Li' and 'F', 'End') or when both actions "down" and "up" are equally good.
     """
-    v_current = np.zeros(8)
-    policy = [None]*8
-    terminate = False
     actions = ("up", "down")
+    policy = [None]*8
+    state_transitions_a = (P_up, P_down)
+    terminate = False
+    v_current = np.zeros(8)
     
+    iteration = 1
     while not terminate:
         delta = np.float64(0)
         
@@ -136,7 +136,7 @@ def value_iteration(state_transitions_a, rewards_a, gamma):
             # find optimal policy            
             q_values = []
             for a_i, _ in enumerate(actions):
-                q_values.append(rewards_a[a_i][s_i] + gamma*np.sum(state_transitions_a[a_i][s_i] @ v_current))
+                q_values.append(r[a_i][s_i] + gamma*np.sum(state_transitions_a[a_i][s_i] @ v_current))
             
             q_best = np.argmax(q_values)
             v_current[s_i] = q_values[q_best]
@@ -147,13 +147,21 @@ def value_iteration(state_transitions_a, rewards_a, gamma):
         # terminate if error small enough
         if delta < accuracy_threshold:
             terminate = True
-    
+
+        print(f"Value Iteration {iteration}:")
+        print(v_current)
+        for i, s in enumerate(['Start', 'A'  , 'LÖ' , 'G'  , 'B'  , 'Li'  , 'F'  , 'End']):
+            print(s, policy[i], end=", ")
+        print()  
+        iteration+=1
+        
     # optimal policy
+    print("Value Iteration optimal policy:")
     for i, s in enumerate(['Start', 'A'  , 'LÖ' , 'G'  , 'B'  , 'Li'  , 'F'  , 'End']):
-        print(s, policy[i])
-              
+        print(s, policy[i], end=", ")
+    print("\n-----")              
     return v_current
 
-v = value_iteration(state_transitions_a=(P_up,P_down), rewards_a=r, gamma=gamma)
-print(v)
+v = value_iteration()
+print("Value Iteration result", v)
 ######################
