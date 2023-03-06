@@ -59,11 +59,11 @@ state_transitions = P_up*pi_up + P_down*pi_down
 print(state_transitions)
 
 # compute expected rewards for the 50/50 policy
-expected_reward = r[0]*pi_up + r[1]*pi_down
-print(expected_reward)
+expected_rewards = r[0]*pi_up + r[1]*pi_down
+print(expected_rewards)
 
 # compute state values
-state_values = np.linalg.inv(np.identity(8) - gamma*state_transitions) @ expected_reward
+state_values = np.linalg.inv(np.identity(8) - gamma*state_transitions) @ expected_rewards
 print(state_values)
 
 ######################
@@ -74,13 +74,86 @@ print(state_values)
 # Let the iteration run so long as the nomr of the state values vector does not change by more than 0.001
 
 ### your code here ###
-...
+accuracy_threshold = 0.001
+
+def richardson_iteration(state_transitions, expected_rewards, gamma):
+    """
+    This is the Richardson Algorithm to iteratively estimate the state value functions. 
+    This implementation is asynchronous and in-place.
+    
+    state_transitions: Our state transition matrix
+    expected_rewards: Our expected rewards vector
+    gamma: Our gamma factor
+    """
+    v_current = np.zeros(8)
+    terminate = False
+    
+    while not terminate:
+        delta = np.float64(0)
+        
+        # policy improvement
+        # we can solve this in one sweep if we loop over the states in reversed order: reversed(list(enumerate(v_current)))
+        for s_i, v_cur in enumerate(v_current):
+            v_old = v_cur
+            v_current[s_i] = expected_rewards[s_i] + np.sum(gamma * state_transitions[s_i] @ v_current) # v_new
+            delta = np.max([delta, np.abs(v_current[s_i] - v_old)]) 
+                        
+        # terminate if error small enough
+        if delta < accuracy_threshold:
+            terminate = True
+            
+    return v_current
+
+estimated_state_values = richardson_iteration(state_transitions=state_transitions, expected_rewards=expected_rewards, gamma=gamma)
+print(estimated_state_values)
 ######################
 
 # Question 3:
 # compute the optimal state values by dynamic programming
 # Determine the number of iterations as for the Richardson iteration
-
 ### your code here ###
-...
+def value_iteration(state_transitions_a, rewards_a, gamma):
+    """
+    By assumption, this value iteration algorithm returns action "up" as the best action to take
+    when both actions "down" and "up" are equally good and when we can only choose one action (i.e. 'Li' and 'F', 'End')
+    
+    state_transitions: Our state transition matrix
+    expected_rewards: Our expected rewards vector
+    gamma: Our gamma factor
+    """
+    v_current = np.zeros(8)
+    policy = [None]*8
+    terminate = False
+    actions = ("up", "down")
+    
+    while not terminate:
+        delta = np.float64(0)
+        
+        # policy improvement
+        for s_i, v_cur in enumerate(v_current):
+            v_old = v_cur
+            
+            # find optimal policy            
+            q_values = []
+            for a_i, _ in enumerate(actions):
+                q_values.append(rewards_a[a_i][s_i] + gamma*np.sum(state_transitions_a[a_i][s_i] @ v_current))
+            
+            q_best = np.argmax(q_values)
+            v_current[s_i] = q_values[q_best]
+            policy[s_i] = actions[q_best]
+            
+            delta = np.max([delta, np.abs(v_current[s_i] - v_old)]) 
+
+        # terminate if error small enough
+        if delta < accuracy_threshold:
+            terminate = True
+    
+    # optimal policy
+    for i, s in enumerate(['Start', 'A'  , 'LÖ' , 'G'  , 'B'  , 'Li'  , 'F'  , 'End']):
+        print(s, policy[i])
+              
+    return v_current
+
+v = value_iteration(state_transitions_a=(P_up,P_down), rewards_a=r, gamma=gamma)
+print(v)
 ######################
