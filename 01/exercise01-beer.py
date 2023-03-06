@@ -91,7 +91,9 @@ v = np.zeros(8)
 
 delta = 0.001
 terminate = False
+iterations = 0
 while not terminate: 
+    iterations += 1
     Delta = np.float64(0) 
     # reversed in order to terminate in one iteration. 
     for state_index, s in reversed(list(enumerate(v))): # sweep through space by traversing from end to start state
@@ -113,6 +115,7 @@ while not terminate:
         if Delta < delta:
             terminate = True
 print(v)
+print(f"Finished task 2 (Richardson Iteration) in {iterations} iterations.")
 ######################
 print()
 print()
@@ -121,7 +124,9 @@ print()
 # Determine the number of iterations as for the Richardson iteration
 v = np.zeros(8)
 terminate = False
+iterations = 0
 while not terminate: 
+    iterations += 1
     Delta = np.float64(0) 
     # reversed in order to terminate in one iteration. 
     for state_index, s in reversed(list(enumerate(v))): # sweep through space by traversing from end to start state
@@ -140,10 +145,12 @@ while not terminate:
         v[state_index] = s
         Delta = np.max([Delta, np.abs(s - v_old)])
         print(state_index, s, v, v_old)
-        # terminate?
-        if Delta < delta:
-            terminate = True
+    # terminate?
+    if Delta < delta:
+        terminate = True
 print(v)
+print(f"Finished task 3 (Dynamic Programming) in {iterations} iterations.")
+# Compute the optimal policy 
 policy = [None] * 8 
 for state_index, s in reversed(list(enumerate(v))): # sweep through space by traversing from end to start state
     inner_sum = np.float64('-inf')
@@ -169,6 +176,8 @@ for state_index, s in reversed(list(enumerate(v))): # sweep through space by tra
         policy[state_index] = 'down'
     else: 
         policy[state_index] = 'up'
+
+print("The optimal policy computed by in task 3 is:")
 for index, element in enumerate(['Start', 'A'  , 'LÖ' , 'G'  , 'B'  , 'Li'  , 'F'  , 'End']):
     print(element, policy[index])
 
