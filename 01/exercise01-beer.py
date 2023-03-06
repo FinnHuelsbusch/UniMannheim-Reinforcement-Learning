@@ -154,14 +154,12 @@ def value_iteration():
             print(s, policy[i], end=", ")
         print()  
         iteration+=1
-        
-    # optimal policy
-    print("Value Iteration optimal policy:")
-    for i, s in enumerate(['Start', 'A'  , 'LÖ' , 'G'  , 'B'  , 'Li'  , 'F'  , 'End']):
-        print(s, policy[i], end=", ")
-    print("\n-----")              
-    return v_current
+    return (v_current, policy)
 
-v = value_iteration()
-print("Value Iteration result", v)
+# Value iteration - optimal policy
+_, policy = value_iteration()
+print("Value Iteration optimal policy:")
+for i, s in enumerate(['Start', 'A'  , 'LÖ' , 'G'  , 'B'  , 'Li'  , 'F'  , 'End']):
+    print(s, policy[i], end=", ")
+print("\n------")
 ######################
