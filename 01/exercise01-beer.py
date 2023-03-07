@@ -1,6 +1,5 @@
 import numpy as np
 
-
 # Start: Home
 # Auld Triangle
 # Lötlampe
@@ -55,32 +54,16 @@ pi_up = pi_down = 0.5
 
 # compute state transitions for the 50/50 policy
 state_transitions = P_up*pi_up + P_down*pi_down
-print(state_transitions)
+print(f"""state_transitions:\nS {state_transitions}""")
 
 # compute expected rewards for the 50/50 policy
 expected_rewards = r[0]*pi_up + r[1]*pi_down
-print(expected_rewards)
+print(f"""expected_rewards:\n {expected_rewards}""")
 
 # compute state values
 state_values = np.linalg.inv(np.identity(8) - gamma*state_transitions) @ expected_rewards
-print(state_values)
+print(f"""state_values:\n {state_values}""")
 print("------")
-######################
-######################
-
-### your code here ###
-pi_up = pi_down = 0.5
-
-# compute state transitions for the 50/50 policy
-state_transitions = P_up*pi_up + P_down*pi_down
-print(state_transitions)
-# compute expected rewards for the 50/50 policy
-expected_reward = r[0]*pi_up + r[1]*pi_down
-print(expected_reward)
-
-# compute state values
-state_values = np.linalg.inv(np.identity(8) - gamma*state_transitions) @ expected_reward
-print(state_values)
 ######################
 print()
 print()
@@ -144,7 +127,6 @@ def value_iteration():
     
     iteration = 1
     while not terminate:
-        iteration += 1
         delta = np.float64(0)
         
         # policy improvement
@@ -161,16 +143,15 @@ def value_iteration():
             policy[s_i] = actions[q_best]
             
             delta = np.max([delta, np.abs(v_current[s_i] - v_old)]) 
-        print(f"Current valuefunction after iteration {iteration}: {v_current}")
+        print(f"Value Iteration {iteration}:")
+        print(f"Current valuefunction:\n{v_current}")
         # terminate if error small enough
         if delta < accuracy_threshold:
             terminate = True
-
-        print(f"Value Iteration {iteration}:")
-        print(v_current)
+        print("Current policy:")
         for i, s in enumerate(['Start', 'A'  , 'LÖ' , 'G'  , 'B'  , 'Li'  , 'F'  , 'End']):
             print(s, policy[i], end=", ")
-        print()  
+        print('\n')  
         iteration+=1
     return (v_current, policy)
 
