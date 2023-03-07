@@ -17,9 +17,9 @@ rewards = []
 average_rewards = np.zeros(env.action_space.n)
 nr_steps_per_action = np.zeros(env.action_space.n)
 
-steps = 2000
+steps = 5000
 for i_episode in range(steps):
-  
+
     print("episode Number is", i_episode)   
     
     #action = env.action_space.sample() # sampling the "action" array which in this case only contains 10 "options" because there is 10 bandits
@@ -36,19 +36,18 @@ for i_episode in range(steps):
     # Exploitation: Pick action with highest expected value
 
     def update_exected_value(action):
-        average_rewards[action] = (average_rewards[action] * (nr_steps_per_action[action]) + rewards[-1]) / nr_steps_per_action[action]
+        average_rewards[action] = (average_rewards[action] * (nr_steps_per_action[action]) + rewards[-1]) / (nr_steps_per_action[action] + 1)
         nr_steps_per_action[action]+=1
 
     # prob of exploration
-    k = 30 # exploration prob. decay factor: can be optimized
+    k = 205 # exploration prob. decay factor: can be optimized
     probability_to_explore = np.exp(-i_episode/(steps/k))
 
     # choose an action
     exploring = np.random.binomial(n=1,p=probability_to_explore) == 1
         
     if exploring:
-        action = env.action_space.sample()
-        print("here")
+        action = np.random.randint(0,10)
     else:
         action = np.argmax(average_rewards)
         
@@ -65,8 +64,15 @@ for i_episode in range(steps):
     #print("info variable is: ",info)
 
 print("sum of rewards: " + str(np.sum(rewards)))
-
 plt.plot(rewards)
 plt.ylabel('rewards')
+plt.xlabel('steps')
+plt.show()
+
+summed_rewards = []
+for i in range(len(rewards)): 
+    summed_rewards.append(np.sum(rewards[0:i+1]))
+plt.plot(summed_rewards)
+plt.ylabel('summed_rewards')
 plt.xlabel('steps')
 plt.show()
