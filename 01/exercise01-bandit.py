@@ -21,10 +21,6 @@ steps = 5000
 for i_episode in range(steps):
 
     print("episode Number is", i_episode)   
-    
-    #action = env.action_space.sample() # sampling the "action" array which in this case only contains 10 "options" because there is 10 bandits
-    #action = i_episode % env.action_space.n
-    #print("action is", action)
 
     ### your code goes here ###
     # We have to trade-off Exploitation and Exploration.
@@ -40,7 +36,7 @@ for i_episode in range(steps):
         nr_steps_per_action[action]+=1
 
     # prob of exploration
-    k = 205 # exploration prob. decay factor: can be optimized
+    k = 205 # exploration prob. decay factor
     probability_to_explore = np.exp(-i_episode/(steps/k))
 
     # choose an action
