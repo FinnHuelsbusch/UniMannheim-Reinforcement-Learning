@@ -22,17 +22,13 @@ for i_episode in range(steps):
 
     print("episode Number is", i_episode)   
     
-    #action = env.action_space.sample() # sampling the "action" array which in this case only contains 10 "options" because there is 10 bandits
-    #action = i_episode % env.action_space.n
-    #print("action is", action)
-
     ### your code goes here ###
     # We have to trade-off Exploitation and Exploration.
-    # For that we consider: 1) The expected best (action) value, 2) The uncertainty of all (action) values, 3) the remaining iterations
+    # For that we consider: 1) The expected best (action) value and 2) the remaining iterations
     # We would like to explore early and exploit later in the episode
-    # Since all bandits are Gaussian, we estimate the Gaussian parameters (μ,σ) using the MLE (sample mean & sample variance)
-    # Idea: q differs depending on the #of iterations (explore early, exploit later)
-    # Exploration: Sample from bandit with highest variance (what if variance differs???)
+    # Since all bandits are Gaussian, we estimate the Gaussian parameters μ using the MLE (sample mean)
+    # Our final solution uses a 'probability_to_explore' which changes (over time) depending on the #of iterations (explore early, exploit later)
+    # Exploration: Sample from bandit randomly
     # Exploitation: Pick action with highest expected value
 
     def update_exected_value(action):
