@@ -54,7 +54,7 @@ pi_up = pi_down = 0.5
 
 # compute state transitions for the 50/50 policy
 state_transitions = P_up*pi_up + P_down*pi_down
-print(f"""state_transitions:\nS {state_transitions}""")
+print(f"""state_transitions:\n {state_transitions}""")
 
 # compute expected rewards for the 50/50 policy
 expected_rewards = r[0]*pi_up + r[1]*pi_down
@@ -105,7 +105,7 @@ def richardson_iteration():
     return v_current
 
 estimated_state_values = richardson_iteration()
-print("Richardson Iteration result:", estimated_state_values)
+print(f"Richardson Iteration result (value function):\n{estimated_state_values}")
 print("------")
 ######################
 print()
@@ -156,7 +156,8 @@ def value_iteration():
     return (v_current, policy)
 
 # Value iteration - optimal policy
-_, policy = value_iteration()
+v, policy = value_iteration()
+print(f"state values: \n{v}")
 print("Value Iteration optimal policy:")
 for i, s in enumerate(['Start', 'A'  , 'LÖ' , 'G'  , 'B'  , 'Li'  , 'F'  , 'End']):
     print(s, policy[i], end=", ")
