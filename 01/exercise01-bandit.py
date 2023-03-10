@@ -3,14 +3,14 @@ import gym
 import gym_bandits
 import matplotlib.pyplot as plt
 
-np.random.seed(42) # make runs deterministic for numpy random number generator
+np.random.seed(351791) # make runs deterministic for numpy random number generator
 
 env = gym.make('BanditTenArmedGaussian-v0')
 
 print('observation space:', env.observation_space.n, 'dimensional')
 print('action space:', env.action_space.n, 'dimensional')
 
-env.seed(34) # make each run the same 
+env.seed(351791) # make each run the same 
 observation = env.reset()
 
 rewards = []
@@ -36,7 +36,7 @@ for i_episode in range(steps):
         nr_steps_per_action[action]+=1
 
     # prob of exploration
-    k = 205 # exploration prob. decay factor
+    k = 300 # exploration prob. decay factor
     probability_to_explore = np.exp(-i_episode/(steps/k))
 
     # choose an action
@@ -58,6 +58,7 @@ for i_episode in range(steps):
     print("reward variable is: ",reward)
     #print("done flag is: ",done)
     #print("info variable is: ",info)
+    print()
 
 print("sum of rewards: " + str(np.sum(rewards)))
 plt.plot(rewards)
