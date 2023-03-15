@@ -41,7 +41,14 @@ def sample_epsilon_greedy_from_q(q, epsilon, state):
     """
     given q-values sample with probability epsilon an arbitrary action and with probability 1-epsilon the maximum q-value action (ties broken arbitrarily)
     """
-    ### complete code here ###
+    if np.random.random() <= epsilon:
+        # choose a random action 
+        return random.choice(range(len(q[state,])))
+    else:
+        # get all actions that have the max value in q
+        best_actions = np.argwhere(q[state,] == np.amax(q[state,])).flatten()
+        # from the best actions choose a random one
+        return np.random.choice(best_actions)
 
 
 def MCOffPolicyControl(env, epsilon=0.1, nr_episodes=5000, max_t=1000, gamma=0.99):
@@ -67,7 +74,7 @@ def MCOffPolicyControl(env, epsilon=0.1, nr_episodes=5000, max_t=1000, gamma=0.9
             
             # compute episode reward
             discounts = [gamma ** i for i in range(len(trajectory) + 1)]
-            R = sum([a * b for a, _, _, b in zip(discounts, trajectory)])
+            R = sum([a * b for a, (_, _, b) in zip(discounts, trajectory)])
             episode_returns.append(R)
             episode_lengths.append(len(trajectory))
 
