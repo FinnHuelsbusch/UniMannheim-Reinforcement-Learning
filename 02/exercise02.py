@@ -169,7 +169,7 @@ def evaluate_greedy_policy(env, policy, nr_episodes=1000, t_max=1000):
     
     return np.mean(reward_sums)
 
-env_frozenlake = gym.make('FrozenLake-v1', map_name="8x8", is_slippery=True)
+env_frozenlake = gym.make('FrozenLake-v1', map_name="4x4", is_slippery=True)
 env_blackjack = FlattenedObservationWrapper(gym.make('Blackjack-v1'))
 
 # below are some default parameters for the control algorithms. You might want to tune them to achieve better results.
