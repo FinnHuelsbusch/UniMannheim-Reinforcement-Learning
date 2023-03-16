@@ -81,8 +81,6 @@ def MCOffPolicyControl(env, epsilon=0.1, nr_episodes=5000, max_t=1000, gamma=0.9
                 # update current state 
                 state = observation
                 # if the environment is in a terminal state stop the sampling
-                if e == 9999: 
-                    print()
                 if terminated: 
                     break
 
@@ -119,6 +117,7 @@ def SARSA(env, epsilon=0.1, alpha=0.01, nr_episodes=50000, max_t=1000, gamma=0.9
     # The underlying deterministic policy is derived from the q-values
     q = np.full((nr_states, nr_actions), 0, dtype=np.float32)
 
+
     # history of episode returns
     episode_returns = [] 
     episode_lengths = []
@@ -134,8 +133,14 @@ def SARSA(env, epsilon=0.1, alpha=0.01, nr_episodes=50000, max_t=1000, gamma=0.9
             for t in range(max_t):
                 next_state, reward, done, _ = env.step(action)
                 rewards.append(reward)
+                next_action = sample_epsilon_greedy_from_q(q, epsilon, next_state)
 
-                #### your code here ###
+                q[state, action] = q[state, action] + alpha * (reward + gamma *q[next_state, next_action] - q[state, action])
+                action = next_action 
+                state = next_state
+                if done: 
+                    break; 
+
 
             discounts = [gamma ** i for i in range(len(rewards) + 1)]
             R = sum([a * b for a, b in zip(discounts, rewards)])
@@ -174,11 +179,11 @@ env_blackjack = FlattenedObservationWrapper(gym.make('Blackjack-v1'))
 
 # below are some default parameters for the control algorithms. You might want to tune them to achieve better results.
 
-# SARSA_frozenlake_policy = SARSA(env_frozenlake, epsilon=0.051, alpha=0.1, nr_episodes=10000, max_t=1000, gamma=0.99)
-# print("Mean episode reward from SARSA trained policy on FrozenLake: ", evaluate_greedy_policy(env_frozenlake, SARSA_frozenlake_policy))
+SARSA_frozenlake_policy = SARSA(env_frozenlake, epsilon=0.051, alpha=0.1, nr_episodes=10000, max_t=1000, gamma=0.99)
+print("Mean episode reward from SARSA trained policy on FrozenLake: ", evaluate_greedy_policy(env_frozenlake, SARSA_frozenlake_policy))
 
-# SARSA_blackjack_policy = SARSA(env_blackjack, epsilon=0.051, alpha=0.1, nr_episodes=10000, max_t=1000, gamma=0.99)
-# print("Mean episode reward from SARSA trained policy on BlackJack: ", evaluate_greedy_policy(env_blackjack, SARSA_blackjack_policy))
+SARSA_blackjack_policy = SARSA(env_blackjack, epsilon=0.051, alpha=0.1, nr_episodes=10000, max_t=1000, gamma=0.99)
+print("Mean episode reward from SARSA trained policy on BlackJack: ", evaluate_greedy_policy(env_blackjack, SARSA_blackjack_policy))
 
 MC_frozenlake_policy = MCOffPolicyControl(env_frozenlake, epsilon=0.051, nr_episodes=10000, max_t=1000, gamma=0.99)
 print("Mean episode reward from MC trained policy on FrozenLake: ", evaluate_greedy_policy(env_frozenlake, MC_frozenlake_policy))
