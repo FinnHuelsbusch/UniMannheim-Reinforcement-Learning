@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 from matplotlib import animation
 import random
 from collections import namedtuple
+import pickle
 
 def flatdim(space):
     if isinstance(space, gym.spaces.Discrete):
@@ -38,6 +39,7 @@ class FlattenedObservationWrapper(gym.ObservationWrapper):
     def observation(self, obs):
         return flatten(self.wrapped_observation_space, obs)
 
+# There was no use found for this method. This is why it was not implemented. 
 def unflatten(space, x):
     pass
 
@@ -155,9 +157,11 @@ def MCOffPolicyControl(env, epsilon=0.1, nr_episodes=5000, max_t=1000, gamma=0.9
             # generate trajectory
             state = env.reset()[0]
             for t in range(max_t):
+                # choose action according to epsilon greedy
                 action = sample_epsilon_greedy_from_q(q, epsilon, state)
+                # take a step
                 observation, reward, terminated, truncated, info  = env.step(action)
-                trajectory.append((state, action, reward))
+                trajectory.append(SAR(state, action, reward))
                 # update current state 
                 state = observation
                 # if the environment is in a terminal state stop the sampling
@@ -178,11 +182,13 @@ def MCOffPolicyControl(env, epsilon=0.1, nr_episodes=5000, max_t=1000, gamma=0.9
                 c[state, action] = c[state, action] + w
                 # update q 
                 q[state, action] = q[state, action] + (w / c[state, action]) * (g- q[state, action])
+                # update pi
                 pi[state] = np.argmax(q[state, ])
+                # update the weights in case we selected the greedy action according to the updated Policy
                 if action != pi[state]:
                     break
                 else: 
-                    w = w / (1-epsilon)
+                    w = w / ((1-epsilon) + (epsilon / nr_actions))
             
             # print average return of the last 100 episodes
             if(e % 100 == 0):
@@ -194,7 +200,7 @@ def MCOffPolicyControl(env, epsilon=0.1, nr_episodes=5000, max_t=1000, gamma=0.9
                 'episode length': "{:3.2f}".format(avg_length),
                 'backtrack': "{:.2f}%".format(avg_backtrack_percentage)
                 })
-    visualize_lake_policy(env, pi)
+    #visualize_lake_policy(env, pi)
     return np.argmax(q, 1)
 
 
@@ -219,16 +225,19 @@ def SARSA(env, epsilon=0.1, alpha=0.01, nr_episodes=50000, max_t=1000, gamma=0.9
     with tqdm.trange(nr_episodes, desc='Training', unit='episodes') as tepisodes:
         for e in tepisodes:
             state = env.reset()[0]
+            # get first action to start with sarsa
             action = sample_epsilon_greedy_from_q(q, epsilon, state)
             c[state, action] += 1
             rewards = []
 
             # Collect trajectory
             for t in range(max_t):
+                # take the selected action 
                 next_state, reward, done, _, _ = env.step(action)
                 rewards.append(reward)
+                # sample the action s_{k+1}
                 next_action = sample_epsilon_greedy_from_q(q, epsilon, next_state)
-
+                # update q based on the current and next step + action 
                 q[state, action] = q[state, action] + alpha * (reward + gamma *q[next_state, next_action] - q[state, action])
                 action = next_action 
                 state = next_state
@@ -250,7 +259,7 @@ def SARSA(env, epsilon=0.1, alpha=0.01, nr_episodes=50000, max_t=1000, gamma=0.9
                 'episode length': avg_length
                 })
 
-    visualize_lake_policy(env, np.argmax(q, 1))   
+    #visualize_lake_policy(env, np.argmax(q, 1))   
     return np.argmax(q, 1)
 
 def evaluate_greedy_policy(env, policy, nr_episodes=1000, t_max=1000):
@@ -270,9 +279,9 @@ def evaluate_greedy_policy(env, policy, nr_episodes=1000, t_max=1000):
     return np.mean(reward_sums)
 
 
-env_frozenlake_small = gym.make('FrozenLake-v1', map_name="4x4", is_slippery=False, render_mode="rgb_array")
+# env_frozenlake_small = gym.make('FrozenLake-v1', map_name="4x4", is_slippery=False, render_mode="rgb_array")
 env_frozenlake_small_slippery = gym.make('FrozenLake-v1', map_name="4x4", is_slippery=True, render_mode="rgb_array")
-env_frozenlake_medium = gym.make('FrozenLake-v1', map_name="8x8", is_slippery=False, render_mode="rgb_array")
+# env_frozenlake_medium = gym.make('FrozenLake-v1', map_name="8x8", is_slippery=False, render_mode="rgb_array")
 env_frozenlake_medium_slippery = gym.make('FrozenLake-v1', map_name="8x8", is_slippery=True, render_mode="rgb_array")
 env_blackjack = FlattenedObservationWrapper(gym.make('Blackjack-v1', render_mode="rgb_array"))
 
@@ -282,25 +291,67 @@ nr_episodes = 10000
 max_t = 400
 gamma = 0.9
 
-
-# below are some default parameters for the control algorithms. You might want to tune them to achieve better results.
+rewards = {}
 for env, name in {
-    env_frozenlake_small: "frozenlake_small",
+    # env_frozenlake_small: "frozenlake_small",
     env_frozenlake_small_slippery: "frozenlake_small_slippery",
-    env_frozenlake_medium: "frozenlake_medium",
+    # env_frozenlake_medium: "frozenlake_medium",
     env_frozenlake_medium_slippery: "frozenlake_medium_slippery",
     }.items():
     MC_policy = MCOffPolicyControl(env, epsilon=epsilon, nr_episodes=nr_episodes, max_t=max_t, gamma=gamma)
-    print("Mean episode reward from MC trained policy on", name, ": ", evaluate_greedy_policy(env, MC_policy))
-    render_FrozenLake(env, MC_policy, name + "_MC.gif", max_t=100)
-
+    mean_reward_mc = evaluate_greedy_policy(env, MC_policy)
+    print("Mean episode reward from MC trained policy on", name, ": ", mean_reward_mc)
+    #render_FrozenLake(env, MC_policy, name + "_MC.gif", max_t=100)
+    rewards[name + ' MC'] = mean_reward_mc
     SARSA_policy = SARSA(env, epsilon=epsilon, alpha=alpha, nr_episodes=nr_episodes, max_t=max_t, gamma=gamma)
-    print("Mean episode reward from SARSA trained policy on", name, ": ", evaluate_greedy_policy(env, SARSA_policy))
-    render_FrozenLake(env, SARSA_policy, name + "_SARSA.gif", max_t=max_t)
+    mean_reward_sarsa = evaluate_greedy_policy(env, SARSA_policy)
+    print("Mean episode reward from SARSA trained policy on", name, ": ", mean_reward_sarsa)
+    #render_FrozenLake(env, SARSA_policy, name + "_SARSA.gif", max_t=max_t)
+    rewards[name + ' SARSA'] = mean_reward_sarsa
+
+MC_blackjack_policy = MCOffPolicyControl(env_blackjack, epsilon=0.051, nr_episodes=10000, max_t=1000, gamma=0.99)
+mean_reward_bj_mc = evaluate_greedy_policy(env, MC_blackjack_policy)
+print("Mean episode reward from MC trained policy on BlackJack: ", mean_reward_bj_mc)
+rewards['BJ MC'] = mean_reward_mc
+
+SARSA_blackjack_policy = SARSA(env_blackjack, alpha=0.1, epsilon=0.051, nr_episodes=10000, max_t=1000, gamma=0.99)
+mean_reward_bj_sarsa = evaluate_greedy_policy(env_blackjack, SARSA_blackjack_policy)
+print("Mean episode reward from SARSA trained policy on BlackJack: ", mean_reward_bj_sarsa)
+rewards['BJ SARSA'] = mean_reward_mc
 
 
-# MC_blackjack_policy = MCOffPolicyControl(env_blackjack, epsilon=0.051, nr_episodes=10000, max_t=1000, gamma=0.99)
-# print("Mean episode reward from MC trained policy on BlackJack: ", evaluate_greedy_policy(env_blackjack, MC_blackjack_policy))
+# all_rewards = {}
+# for gamma in np.arange(0.5, 1.1, 0.25):
+#     for alpha in np.arange(0.5, 1.1, 0.25): 
+#         for epsilon in np.arange(0.5, 1.1, 0.25): 
+#             rewards = {}
+#             # below are some default parameters for the control algorithms. You might want to tune them to achieve better results.
+#             for env, name in {
+#                 # env_frozenlake_small: "frozenlake_small",
+#                 env_frozenlake_small_slippery: "frozenlake_small_slippery",
+#                 # env_frozenlake_medium: "frozenlake_medium",
+#                 env_frozenlake_medium_slippery: "frozenlake_medium_slippery",
+#                 }.items():
+#                 MC_policy = MCOffPolicyControl(env, epsilon=epsilon, nr_episodes=nr_episodes, max_t=max_t, gamma=gamma)
+#                 mean_reward_mc = evaluate_greedy_policy(env, MC_policy)
+#                 print("Mean episode reward from MC trained policy on", name, ": ", mean_reward_mc)
+#                 #render_FrozenLake(env, MC_policy, name + "_MC.gif", max_t=100)
+#                 rewards[name + ' MC'] = mean_reward_mc
+#                 SARSA_policy = SARSA(env, epsilon=epsilon, alpha=alpha, nr_episodes=nr_episodes, max_t=max_t, gamma=gamma)
+#                 mean_reward_sarsa = evaluate_greedy_policy(env, SARSA_policy)
+#                 print("Mean episode reward from SARSA trained policy on", name, ": ", mean_reward_sarsa)
+#                 #render_FrozenLake(env, SARSA_policy, name + "_SARSA.gif", max_t=max_t)
+#                 rewards[name + ' SARSA'] = mean_reward_sarsa
 
-# SARSA_blackjack_policy = SARSA(env_blackjack, alpha=0.1, epsilon=0.051, nr_episodes=10000, max_t=1000, gamma=0.99)
-# print("Mean episode reward from SARSA trained policy on BlackJack: ", evaluate_greedy_policy(env_blackjack, SARSA_blackjack_policy))
+#             MC_blackjack_policy = MCOffPolicyControl(env_blackjack, epsilon=0.051, nr_episodes=10000, max_t=1000, gamma=0.99)
+#             mean_reward_bj_mc = evaluate_greedy_policy(env, MC_blackjack_policy)
+#             print("Mean episode reward from MC trained policy on BlackJack: ", mean_reward_bj_mc)
+#             rewards['BJ MC'] = mean_reward_mc
+
+#             SARSA_blackjack_policy = SARSA(env_blackjack, alpha=0.1, epsilon=0.051, nr_episodes=10000, max_t=1000, gamma=0.99)
+#             mean_reward_bj_sarsa = evaluate_greedy_policy(env_blackjack, SARSA_blackjack_policy)
+#             print("Mean episode reward from SARSA trained policy on BlackJack: ", mean_reward_bj_sarsa)
+#             rewards['BJ SARSA'] = mean_reward_mc
+#             all_rewards[str(gamma) +' '+ str(alpha)+' ' + str(epsilon)] = rewards
+# with open("all_rewards.pickle", "wb") as f:
+#     pickle.dump(all_rewards, f)
