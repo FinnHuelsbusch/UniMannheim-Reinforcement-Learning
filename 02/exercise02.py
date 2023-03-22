@@ -80,7 +80,7 @@ def MCOffPolicyControl(env, epsilon=0.1, nr_episodes=5000, max_t=1000, gamma=0.9
     nr_actions = env.action_space.n
     nr_states = env.observation_space.n
     
-    q = np.random.rand(nr_states, nr_actions)
+    q = np.full((nr_states, nr_actions), 0.0, dtype=np.float32)
     c = np.full((nr_states, nr_actions), 0.0, dtype=np.float32)
     pi = np.zeros(nr_states)
 
@@ -150,8 +150,7 @@ def SARSA(env, epsilon=0.1, alpha=0.01, nr_episodes=50000, max_t=1000, gamma=0.9
 
     # SARSA usees an epsilon-greedy policy
     # The underlying deterministic policy is derived from the q-values
-    # The terminal states are not known in advance so we init every value randomly and update them later on when we observe a terminal state
-    q = np.random.rand(nr_states, nr_actions)
+    q = np.full((nr_states, nr_actions), 0, dtype=np.float32)
 
 
     # history of episode returns
@@ -169,7 +168,7 @@ def SARSA(env, epsilon=0.1, alpha=0.01, nr_episodes=50000, max_t=1000, gamma=0.9
             # Collect trajectory
             for t in range(max_t):
                 # take the selected action 
-                next_state, reward, done, truncated, info = env.step(action)
+                next_state, reward, done, _, _ = env.step(action)
                 rewards.append(reward)
                 # sample the action s_{k+1}
                 next_action = sample_epsilon_greedy_from_q(q, epsilon, next_state)
@@ -178,8 +177,6 @@ def SARSA(env, epsilon=0.1, alpha=0.01, nr_episodes=50000, max_t=1000, gamma=0.9
                 action = next_action 
                 state = next_state
                 if done: 
-                    if not truncated: 
-                        q[state] = 0
                     break; 
 
 
