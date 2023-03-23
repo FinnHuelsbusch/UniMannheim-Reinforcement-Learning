@@ -223,14 +223,14 @@ env_blackjack = FlattenedObservationWrapper(gym.make('Blackjack-v1', render_mode
 
 epsilon = 0.1
 alpha = 0.1
-nr_episodes = 10000
+nr_episodes = 20000
 max_t = 400
 gamma = 0.9999
 
 
 for env, name in {
-    env_frozenlake_small: "frozenlake_small",
-    env_frozenlake_small_slippery: "frozenlake_small_slippery",
+    #env_frozenlake_small: "frozenlake_small",
+    #env_frozenlake_small_slippery: "frozenlake_small_slippery",
     env_frozenlake_medium: "frozenlake_medium",
     env_frozenlake_medium_slippery: "frozenlake_medium_slippery",
     }.items():
