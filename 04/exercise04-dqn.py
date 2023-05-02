@@ -46,12 +46,18 @@ def transform(x):
     return x
 
 
-def get_epsilon_action(qnet, state, epsilon, nr_actions):
+def get_epsilon_action(qnet, state, epsilon, nr_actions, double_q_learning, dqnet):
+    if double_q_learning and not dqnet: 
+        raise ValueError('double q learning is activated but the second is not supplied')
+    
     if random.uniform(0.0, 1.0) < epsilon:
         action = random.randrange(nr_actions)
     else:
         qvals = qnet.forward(state)
-        action = torch.argmax(qvals).item()
+        if double_q_learning: 
+            dqvals = dqnet.forward(state)
+            qvals = qvals + dqvals
+        action = torch.argmax(qvals).item()    
     return action
 
 
@@ -105,11 +111,22 @@ def linear_schedule(start_e: float, end_e: float, duration: int, t: int):
 
 
 def DQN(qnet, env, optimizer, start_epsilon=1, end_epsilon=0.05, exploration_fraction=0.1, gamma=1.0, nr_episodes=5000, max_t=100,
-        replay_buffer_size=1000000, batch_size=32, warm_start_steps=1000, sync_rate=1024, train_frequency=8):
+        replay_buffer_size=1000000, batch_size=32, warm_start_steps=1000, sync_rate=1024, train_frequency=8, double_q_learning=False, dqnet= None, doptimizer=None):
+    
+    if double_q_learning and not dqnet: 
+        raise ValueError('double q learning is activated but the second qnet is not supplied')
+    if double_q_learning and not doptimizer:
+        raise ValueError('double q learning is activated but the second optimizer is not supplied')
+    if not double_q_learning and dqnet: 
+        Warning('A second q net is given while double q learning is deactivated. Ignoring the second qnet')
+    if not double_q_learning and doptimizer:
+        Warning('A second optimizer is given while double q learning is deactivated. Ignoring the second optimizer')
 
     print(f"Train policy with DQN for {nr_episodes} episodes using at most {max_t} steps, gamma = {gamma}, start epsilon = {start_epsilon}, end epsilon = {end_epsilon}, exploration fraction = {exploration_fraction}, replay buffer size = {replay_buffer_size}, sync rate = {sync_rate}, warm starting steps for filling the replay buffer = {warm_start_steps}")
 
     target_qnet = copy.deepcopy(qnet)
+    if double_q_learning: 
+        target_dqnet = copy.deepcopy(dqnet)
     buffer = ReplayBuffer(replay_buffer_size)
     nr_actions = env.action_space.n
     episode_returns = []
@@ -130,7 +147,7 @@ def DQN(qnet, env, optimizer, start_epsilon=1, end_epsilon=0.05, exploration_fra
     for i in range(warm_start_steps):
         action = random.randrange(nr_actions)
         new_state, reward, done, truncated, _ = env.step(action)
-        exp = Experience(state, action, reward, done, new_state)
+        exp = Experience(state, action, reward, done or truncated, new_state)
         buffer.append(exp)
         state = new_state
         if done or truncated:
@@ -153,7 +170,7 @@ def DQN(qnet, env, optimizer, start_epsilon=1, end_epsilon=0.05, exploration_fra
                 # step through environment with agent
                 with torch.no_grad():
                     action = get_epsilon_action(
-                        qnet, transform(state), epsilon, nr_actions)
+                        qnet, transform(state), epsilon, nr_actions, double_q_learning, dqnet)
 
                 new_state, reward, done, truncated, _ = env.step(action)
                 buffer.append(Experience(np.array(state),
@@ -165,36 +182,83 @@ def DQN(qnet, env, optimizer, start_epsilon=1, end_epsilon=0.05, exploration_fra
                 if step_counter % train_frequency == 0:
                     states, actions, rewards, dones, next_states = buffer.sample(
                         batch_size)
+                    if double_q_learning: 
+                        to_be_updated = np.random.choice(['A','B'])
+                        if to_be_updated == 'A': 
+                            qvalues = qnet.forward(transform(states))
+                            qvalues = torch.gather(qvalues.squeeze(0), 1, torch.from_numpy(
+                                actions).to(device).unsqueeze(-1)).squeeze(1)
+                            best_actions = torch.argmax(qnet.forward(transform(next_states)).squeeze(0), dim=1) 
+                            with torch.no_grad():
+                                next_qvalues = target_dqnet(transform(next_states))
+                                next_qvalues = torch.gather(next_qvalues.squeeze(0), 1, best_actions.to(device).unsqueeze(-1)).squeeze(1)
+                                next_qvalues[dones] = 0.0
+                                next_qvalues = next_qvalues.detach()
+                                nr_terminal_states.append(dones.sum())   
+                            expected_qvalues = gamma * next_qvalues + torch.Tensor(rewards).to(device)
+                            loss = nn.MSELoss()(qvalues, expected_qvalues)
+                            writer.add_scalar("losses one/td_loss", loss, step_counter)
+                            writer.add_scalar("losses one/q_values",
+                                        qvalues.mean().item(), step_counter)
+                            writer.add_scalar("charts/SPS", int(step_counter / (time.time() - start_time)), step_counter)
+                            optimizer.zero_grad()
+                            loss.backward()
+                            optimizer.step()
+                        elif to_be_updated == 'B': 
+                            qvalues = dqnet.forward(transform(states))
+                            qvalues = torch.gather(qvalues.squeeze(0), 1, torch.from_numpy(
+                                actions).to(device).unsqueeze(-1)).squeeze(1)
+                            best_actions = torch.argmax(dqnet.forward(transform(next_states)).squeeze(0)  , dim=1) 
+                            with torch.no_grad():
+                                next_qvalues = target_qnet(transform(next_states))
+                                next_qvalues = torch.gather(next_qvalues.squeeze(0), 1, best_actions.to(device).unsqueeze(-1)).squeeze(1)
+                                next_qvalues[dones] = 0.0
+                                next_qvalues = next_qvalues.detach()
+                                nr_terminal_states.append(dones.sum())   
+                            expected_qvalues = gamma * next_qvalues + torch.Tensor(rewards).to(device)
+                            loss = nn.MSELoss()(qvalues, expected_qvalues)
 
-                    qvalues = qnet.forward(transform(states))
-                    qvalues = torch.gather(qvalues.squeeze(0), 1, torch.from_numpy(
-                        actions).to(device).unsqueeze(-1)).squeeze(1)
+                            writer.add_scalar("losses two/td_loss", loss, step_counter)
+                            writer.add_scalar("losses two/q_values", qvalues.mean().item(), step_counter)
+                            writer.add_scalar("charts/SPS", int(step_counter / (time.time() - start_time)), step_counter)
 
-                    with torch.no_grad():
-                        next_qvalues = target_qnet(transform(next_states))
-                        next_qvalues, _ = torch.max(
-                            next_qvalues.squeeze(0), dim=1)
-                        next_qvalues[dones] = 0.0
-                        next_qvalues = next_qvalues.detach()
-                        nr_terminal_states.append(dones.sum())
+                            doptimizer.zero_grad()
+                            loss.backward()
+                            doptimizer.step()
+                    else: 
+                        qvalues = qnet.forward(transform(states))
+                        qvalues = torch.gather(qvalues.squeeze(0), 1, torch.from_numpy(
+                            actions).to(device).unsqueeze(-1)).squeeze(1)
 
-                    expected_qvalues = gamma * next_qvalues + \
-                        torch.Tensor(rewards).to(device)
-                    loss = nn.MSELoss()(qvalues, expected_qvalues)
+                        with torch.no_grad():
+                            next_qvalues = target_qnet(transform(next_states))
+                            next_qvalues, _ = torch.max(
+                                next_qvalues.squeeze(0), dim=1)
+                            next_qvalues[dones] = 0.0
+                            next_qvalues = next_qvalues.detach()
+                            nr_terminal_states.append(dones.sum())
 
-                    writer.add_scalar("losses/td_loss", loss, step_counter)
-                    writer.add_scalar("losses/q_values",
-                                      qvalues.mean().item(), step_counter)
-                    writer.add_scalar(
-                        "charts/SPS", int(step_counter / (time.time() - start_time)), step_counter)
+                        expected_qvalues = gamma * next_qvalues + \
+                            torch.Tensor(rewards).to(device)
+                        loss = nn.MSELoss()(qvalues, expected_qvalues)
 
-                    optimizer.zero_grad()
-                    loss.backward()
-                    optimizer.step()
+                        writer.add_scalar("losses one/td_loss", loss, step_counter)
+                        writer.add_scalar("losses one/q_values",
+                                        qvalues.mean().item(), step_counter)
+                        writer.add_scalar(
+                            "charts/SPS", int(step_counter / (time.time() - start_time)), step_counter)
+
+                        optimizer.zero_grad()
+                        loss.backward()
+                        optimizer.step()
 
                 # Soft update of target network
                 if step_counter % sync_rate == 0:
-                    target_qnet.load_state_dict(qnet.state_dict())
+                    to_be_updated = np.random.choice(['A','B'])
+                    if to_be_updated == 'A':
+                        target_qnet.load_state_dict(qnet.state_dict())
+                    elif to_be_updated == 'B':
+                        target_dqnet.load_state_dict(dqnet.state_dict())
 
                 if done or truncated:
                     break
@@ -291,7 +355,9 @@ replay_buffer_size = 100000  # 1M is the DQN paper default
 
 model = Model(env.action_space.n).to(device)
 optimizer = torch.optim.Adam(model.parameters(), lr=0.0000625, eps=1.5e-4)
+dmodel = Model(env.action_space.n).to(device)
+doptimizer = torch.optim.Adam(dmodel.parameters(), lr=0.0000625, eps=1.5e-4)
 # optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
 # optimizer = torch.optim.RMSprop(model.parameters(), lr=1e-2)
 DQN(model, env, optimizer, gamma=gamma, start_epsilon=start_epsilon, end_epsilon=end_epsilon, exploration_fraction=exploration_fraction,
-    nr_episodes=nr_episodes, max_t=max_t, warm_start_steps=500, sync_rate=128, replay_buffer_size=replay_buffer_size, train_frequency=2)
+    nr_episodes=nr_episodes, max_t=max_t, warm_start_steps=500, sync_rate=128, replay_buffer_size=replay_buffer_size, train_frequency=2, dqnet=dmodel, doptimizer=doptimizer, double_q_learning=True)
