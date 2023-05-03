@@ -254,11 +254,14 @@ def DQN(qnet, env, optimizer, start_epsilon=1, end_epsilon=0.05, exploration_fra
 
                 # Soft update of target network
                 if step_counter % sync_rate == 0:
-                    to_be_updated = np.random.choice(['A','B'])
-                    if to_be_updated == 'A':
+                    if double_q_learning:
+                        to_be_updated = np.random.choice(['A','B'])
+                        if to_be_updated == 'A':
+                            target_qnet.load_state_dict(qnet.state_dict())
+                        elif to_be_updated == 'B':
+                            target_dqnet.load_state_dict(dqnet.state_dict())
+                    else:
                         target_qnet.load_state_dict(qnet.state_dict())
-                    elif to_be_updated == 'B':
-                        target_dqnet.load_state_dict(dqnet.state_dict())
 
                 if done or truncated:
                     break
@@ -360,4 +363,4 @@ doptimizer = torch.optim.Adam(dmodel.parameters(), lr=0.0000625, eps=1.5e-4)
 # optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
 # optimizer = torch.optim.RMSprop(model.parameters(), lr=1e-2)
 DQN(model, env, optimizer, gamma=gamma, start_epsilon=start_epsilon, end_epsilon=end_epsilon, exploration_fraction=exploration_fraction,
-    nr_episodes=nr_episodes, max_t=max_t, warm_start_steps=500, sync_rate=128, replay_buffer_size=replay_buffer_size, train_frequency=2, dqnet=dmodel, doptimizer=doptimizer, double_q_learning=True)
+    nr_episodes=nr_episodes, max_t=max_t, warm_start_steps=500, sync_rate=128, replay_buffer_size=replay_buffer_size, train_frequency=2, dqnet=dmodel, doptimizer=doptimizer, double_q_learning=False)
