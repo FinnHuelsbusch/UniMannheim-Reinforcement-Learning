@@ -111,7 +111,7 @@ def linear_schedule(start_e: float, end_e: float, duration: int, t: int):
 
 
 def DQN(qnet, env, optimizer, start_epsilon=1, end_epsilon=0.05, exploration_fraction=0.1, gamma=1.0, nr_episodes=5000, max_t=100,
-        replay_buffer_size=1000000, batch_size=32, warm_start_steps=1000, sync_rate=1024, train_frequency=8, double_q_learning=False, dqnet= None, doptimizer=None):
+        replay_buffer_size=1000000, batch_size=32, warm_start_steps=1000, sync_rate=1024, train_frequency=8, double_q_learning=False, dqnet= None, doptimizer=None, n_step = 0):
     
     if double_q_learning and not dqnet: 
         raise ValueError('double q learning is activated but the second qnet is not supplied')
@@ -143,16 +143,27 @@ def DQN(qnet, env, optimizer, start_epsilon=1, end_epsilon=0.05, exploration_fra
     start_time = time.time()
 
     # populate buffer
+    n_step_buffer = collections.deque(maxlen=n_step)
     state = reset(env)
     for i in range(warm_start_steps):
         action = random.randrange(nr_actions)
         new_state, reward, done, truncated, _ = env.step(action)
         exp = Experience(state, action, reward, done or truncated, new_state)
-        buffer.append(exp)
+        n_step_buffer.append(exp)
+        if len(n_step_buffer) == n_step:
+            state = n_step_buffer[0].state
+            reward = sum([n_step_buffer[i].reward *
+                          gamma**i for i in range(n_step)])
+            new_state = n_step_buffer[-1].new_state
+            done = n_step_buffer[-1].done
+            exp = Experience(state, action, reward, done, new_state)
+            buffer.append(exp)
         state = new_state
         if done or truncated:
+            n_step_buffer.clear()
             state = reset(env)
         if i % 10 == 0:
+            n_step_buffer.clear()
             state = reset(env)
 
     step_counter = 0
@@ -162,19 +173,38 @@ def DQN(qnet, env, optimizer, start_epsilon=1, end_epsilon=0.05, exploration_fra
             episode_return = 0.0
             epsilon = linear_schedule(
                 start_epsilon, end_epsilon, exploration_fraction * nr_episodes, e)
-
+            T = np.inf
+            n_step_buffer = collections.deque(maxlen=n_step)
             # Collect trajectory
             for t in range(max_t):
                 step_counter = step_counter + 1
+                if t < T: 
+                    # step through environment with agent
+                    with torch.no_grad():
+                        action = get_epsilon_action(
+                            qnet, transform(state), epsilon, nr_actions, double_q_learning, dqnet)
 
-                # step through environment with agent
-                with torch.no_grad():
-                    action = get_epsilon_action(
-                        qnet, transform(state), epsilon, nr_actions, double_q_learning, dqnet)
+                    new_state, reward, done, truncated, _ = env.step(action)
+                    n_step_buffer.append(Experience(np.array(state),
+                                action, reward, done, new_state))
+                tau = t - n_step + 1
+                if tau >= 0:
+                    # calculate n step return
+                    n_step_return = sum(
+                        [gamma ** i * n_step_buffer[i].reward for i in range(n_step)])
+                    if tau + n_step < T:
+                        if double_q_learning:
+                            n_step_return += gamma ** n_step * \
+                                (qnet.forward(transform(n_step_buffer[-1].new_state)) +
+                                dqnet.forward(transform(n_step_buffer[-1].new_state))
+                                ).max().item()
+                        else:
+                            n_step_return += gamma ** n_step * \
+                                qnet.forward(transform(n_step_buffer[-1].new_state)).max().item()
+                    # add n step return to buffer
+                    buffer.append(Experience(n_step_buffer[0].state,
+                                n_step_buffer[0].action, n_step_return, n_step_buffer[-1].done, n_step_buffer[-1].new_state))
 
-                new_state, reward, done, truncated, _ = env.step(action)
-                buffer.append(Experience(np.array(state),
-                              action, reward, done, new_state))
                 state = new_state
                 episode_return += (gamma ** t) * reward
 
@@ -263,7 +293,7 @@ def DQN(qnet, env, optimizer, start_epsilon=1, end_epsilon=0.05, exploration_fra
                     else:
                         target_qnet.load_state_dict(qnet.state_dict())
 
-                if done or truncated:
+                if tau == T -1:
                     break
 
             episode_lengths.append(t+1)
@@ -381,11 +411,11 @@ gamma = 0.99
 replay_buffer_size = 100000  # 1M is the DQN paper default
 
 # Dueling Network architecture
-model = Model(env.action_space.n, dueling=True).to(device)
+model = Model(env.action_space.n, dueling=False).to(device)
 optimizer = torch.optim.Adam(model.parameters(), lr=0.0000625, eps=1.5e-4)
-dmodel = Model(env.action_space.n).to(device)
+dmodel = Model(env.action_space.n, dueling=False).to(device)
 doptimizer = torch.optim.Adam(dmodel.parameters(), lr=0.0000625, eps=1.5e-4)
 # optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
 # optimizer = torch.optim.RMSprop(model.parameters(), lr=1e-2)
 DQN(model, env, optimizer, gamma=gamma, start_epsilon=start_epsilon, end_epsilon=end_epsilon, exploration_fraction=exploration_fraction,
-    nr_episodes=nr_episodes, max_t=max_t, warm_start_steps=500, sync_rate=128, replay_buffer_size=replay_buffer_size, train_frequency=2, dqnet=dmodel, doptimizer=doptimizer, double_q_learning=False)
+    nr_episodes=nr_episodes, max_t=max_t, warm_start_steps=500, sync_rate=128, replay_buffer_size=replay_buffer_size, train_frequency=2, dqnet=dmodel, doptimizer=doptimizer, double_q_learning=False, n_step=6)
