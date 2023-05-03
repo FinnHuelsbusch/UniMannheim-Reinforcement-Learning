@@ -187,7 +187,7 @@ def DQN(qnet, env, optimizer, start_epsilon=1, end_epsilon=0.05, exploration_fra
                         if to_be_updated == 'A': 
                             qvalues = qnet.forward(transform(states))
                             qvalues = torch.gather(qvalues.squeeze(0), 1, torch.from_numpy(
-                                actions).to(device).unsqueeze(-1)).squeeze(1)
+                                actions).long().to(device).unsqueeze(-1)).squeeze(1)
                             best_actions = torch.argmax(qnet.forward(transform(next_states)).squeeze(0), dim=1) 
                             with torch.no_grad():
                                 next_qvalues = target_dqnet(transform(next_states))
@@ -207,7 +207,7 @@ def DQN(qnet, env, optimizer, start_epsilon=1, end_epsilon=0.05, exploration_fra
                         elif to_be_updated == 'B': 
                             qvalues = dqnet.forward(transform(states))
                             qvalues = torch.gather(qvalues.squeeze(0), 1, torch.from_numpy(
-                                actions).to(device).unsqueeze(-1)).squeeze(1)
+                                actions).long().to(device).unsqueeze(-1)).squeeze(1)
                             best_actions = torch.argmax(dqnet.forward(transform(next_states)).squeeze(0)  , dim=1) 
                             with torch.no_grad():
                                 next_qvalues = target_qnet(transform(next_states))
@@ -292,33 +292,57 @@ def DQN(qnet, env, optimizer, start_epsilon=1, end_epsilon=0.05, exploration_fra
 # Use leaky ReLUs with parameter 0.01 in between
 # You can also experiment with deeper networks with smaller filters, residual connections and batch norm. Whatever brings benefits!
 class Model(nn.Module):
-    def __init__(self, nr_actions):
+    def __init__(self, nr_actions, dueling=False):
         super(Model, self).__init__()
         self.conv1 = nn.Conv2d(4, 32, kernel_size=8, stride=4)
         self.conv2 = nn.Conv2d(32, 64, kernel_size=4, stride=2)
         self.conv3 = nn.Conv2d(64, 64, kernel_size=3, stride=1)
-        self.fc1 = nn.Linear(7*7*64, 1024)
-        self.fc2 = nn.Linear(1024, nr_actions)
 
-        torch.nn.init.kaiming_normal_(
-            self.conv1.weight, nonlinearity='leaky_relu')
-        torch.nn.init.kaiming_normal_(
-            self.conv2.weight, nonlinearity='leaky_relu')
-        torch.nn.init.kaiming_normal_(
-            self.conv3.weight, nonlinearity='leaky_relu')
-        torch.nn.init.kaiming_normal_(
-            self.fc1.weight, nonlinearity='leaky_relu')
-        torch.nn.init.kaiming_normal_(
-            self.fc2.weight, nonlinearity='leaky_relu')
+        self.dueling = dueling
+        self.nr_actions = nr_actions
+        self.__init_dueling() if dueling else self.__init_non_dueling()
+
+        torch.nn.init.kaiming_normal_(self.conv1.weight, nonlinearity='leaky_relu')
+        torch.nn.init.kaiming_normal_(self.conv2.weight, nonlinearity='leaky_relu')
+        torch.nn.init.kaiming_normal_(self.conv3.weight, nonlinearity='leaky_relu')
+
+    def __init_dueling(self):
+        self.value_stream = nn.Sequential(
+            nn.Linear(7*7*64, 1024),
+            nn.LeakyReLU(0.01),
+            nn.Linear(1024, 1)
+        )            
+        self.advantage_stream = nn.Sequential(
+            nn.Linear(7*7*64, 1024),
+            nn.LeakyReLU(0.01),
+            nn.Linear(1024, self.nr_actions)
+        )
+        # init weights
+        for layer in (*self.value_stream, *self.advantage_stream):
+            if isinstance(layer, nn.Linear):
+                torch.nn.init.kaiming_normal_(layer.weight, nonlinearity='leaky_relu')
+
+    def __init_non_dueling(self):
+        self.fc1 = nn.Linear(7*7*64, 1024)
+        self.fc2 = nn.Linear(1024, self.nr_actions)
+
+        torch.nn.init.kaiming_normal_(self.fc1.weight, nonlinearity='leaky_relu')
+        torch.nn.init.kaiming_normal_(self.fc2.weight, nonlinearity='leaky_relu')
 
     def forward(self, x):
         x = F.leaky_relu(self.conv1(x), 0.01)
         x = F.leaky_relu(self.conv2(x), 0.01)
         x = F.leaky_relu(self.conv3(x), 0.01)
-        x = F.leaky_relu(self.fc1(torch.flatten(x, -3, -1)), 0.01)
-        x = self.fc2(x)
-        return x
-
+        
+        if self.dueling:
+            features = torch.flatten(x, -3, -1)
+            values = self.value_stream(features)
+            advantages = self.advantage_stream(features)
+            qvals = values + (advantages - advantages.mean())
+        else:
+            x = F.leaky_relu(self.fc1(torch.flatten(x, -3, -1)), 0.01)
+            qvals = self.fc2(x)
+        return qvals
 
 env = gym.make('BreakoutNoFrameskip-v4', render_mode='rgb_array')
 # env = gym.wrappers.RecordEpisodeStatistics(env)
@@ -356,7 +380,8 @@ max_t = 4000
 gamma = 0.99
 replay_buffer_size = 100000  # 1M is the DQN paper default
 
-model = Model(env.action_space.n).to(device)
+# Dueling Network architecture
+model = Model(env.action_space.n, dueling=True).to(device)
 optimizer = torch.optim.Adam(model.parameters(), lr=0.0000625, eps=1.5e-4)
 dmodel = Model(env.action_space.n).to(device)
 doptimizer = torch.optim.Adam(dmodel.parameters(), lr=0.0000625, eps=1.5e-4)
