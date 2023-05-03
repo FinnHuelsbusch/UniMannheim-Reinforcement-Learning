@@ -70,9 +70,9 @@ class ReplayBuffer:
         capacity: size of the buffer
     """
 
-    def __init__(self, capacity: int) -> None:
+    def __init__(self, capacity: int, gamma: float) -> None:
         self.buffer = collections.deque(maxlen=capacity)
-
+        self.gamma = gamma
     def __len__(self) -> None:
         return len(self.buffer)
 
@@ -84,13 +84,35 @@ class ReplayBuffer:
         """
         self.buffer.append(experience)
 
-    def sample(self, batch_size: int) -> Tuple:
+    def sample(self, batch_size: int, n_step = 0) -> Tuple:
         indices = np.random.choice(len(self.buffer), batch_size, replace=False)
         states, actions, rewards, dones, next_states = zip(
-            *[self.buffer[idx] for idx in indices])
+            *[self.buffer[idx] for idx in indices]
+        )
 
-        return (np.array(states), np.array(actions), np.array(rewards, dtype=np.float32),
-                np.array(dones, dtype=bool), np.array(next_states))
+        states = np.array(states)
+        actions = np.array(actions)
+        rewards = np.array(rewards, dtype=np.float32)
+        dones = np.array(dones, dtype=bool)
+        next_states = np.array(next_states)
+
+        n_step_rewards = []
+        for i in indices:
+            n_step_reward = 0
+            for j in range(n_step+1):
+                if i + j >= len(self.buffer) or self.buffer[i + j].done:
+                    break
+                n_step_reward += self.gamma**j * self.buffer[i + j].reward
+            # n_step_reward += self.gamma**n_step * self.buffer[i + n_step].reward
+            n_step_rewards.append(n_step_reward)
+
+        return (
+            states,
+            actions,
+            np.array(n_step_rewards, dtype=np.float32),
+            dones,
+            next_states,
+        )
 
 
 def reset(env):
@@ -114,7 +136,7 @@ def DQN(qnet, env, optimizer, start_epsilon=1, end_epsilon=0.05, exploration_fra
     print(f"Train policy with DQN for {nr_episodes} episodes using at most {max_t} steps, gamma = {gamma}, start epsilon = {start_epsilon}, end epsilon = {end_epsilon}, exploration fraction = {exploration_fraction}, replay buffer size = {replay_buffer_size}, sync rate = {sync_rate}, warm starting steps for filling the replay buffer = {warm_start_steps}")
 
     target_qnet = copy.deepcopy(qnet)
-    buffer = ReplayBuffer(replay_buffer_size)
+    buffer = ReplayBuffer(replay_buffer_size, gamma)
     nr_actions = env.action_space.n
     episode_returns = []
     episode_lengths = []
@@ -130,27 +152,16 @@ def DQN(qnet, env, optimizer, start_epsilon=1, end_epsilon=0.05, exploration_fra
     start_time = time.time()
 
     # populate buffer
-    n_step_buffer = collections.deque(maxlen=n_step)
     state = reset(env)
     for i in range(warm_start_steps):
         action = random.randrange(nr_actions)
         new_state, reward, done, truncated, _ = env.step(action)
         exp = Experience(state, action, reward, done or truncated, new_state)
-        n_step_buffer.append(exp)
-        if len(n_step_buffer) == n_step:
-            state = n_step_buffer[0].state
-            reward = sum([n_step_buffer[i].reward *
-                          gamma**i for i in range(n_step)])
-            new_state = n_step_buffer[-1].new_state
-            done = n_step_buffer[-1].done
-            exp = Experience(state, action, reward, done, new_state)
-            buffer.append(exp)
+        buffer.append(exp)
         state = new_state
         if done or truncated:
-            n_step_buffer.clear()
             state = reset(env)
         if i % 10 == 0:
-            n_step_buffer.clear()
             state = reset(env)
 
     step_counter = 0
@@ -160,41 +171,25 @@ def DQN(qnet, env, optimizer, start_epsilon=1, end_epsilon=0.05, exploration_fra
             episode_return = 0.0
             epsilon = linear_schedule(
                 start_epsilon, end_epsilon, exploration_fraction * nr_episodes, e)
-            T = np.inf
-            n_step_buffer = collections.deque(maxlen=n_step)
             # Collect trajectory
             for t in range(max_t):
                 step_counter = step_counter + 1
-                if t < T: 
-                    # step through environment with agent
-                    with torch.no_grad():
-                        action = get_epsilon_action(
-                            qnet, transform(state), epsilon, nr_actions)
 
-                    new_state, reward, done, truncated, _ = env.step(action)
-                    n_step_buffer.append(Experience(np.array(state),
-                                action, reward, done, new_state))
-                    if done or truncated:
-                        T = t + 1
-                tau = t - n_step + 1
-                if tau >= 0:
-                    # calculate n step return
-                    n_step_return = sum(
-                        [gamma ** i * n_step_buffer[i].reward for i in range(n_step)])
-                    if tau + n_step < T:
-                        n_step_return += gamma ** n_step * \
-                            qnet.forward(transform(n_step_buffer[-1].new_state)).max().item()
-                    # add n step return to buffer
-                    buffer.append(Experience(n_step_buffer[0].state,
-                                n_step_buffer[0].action, n_step_return, n_step_buffer[0].done, n_step_buffer[0].new_state))
+                # step through environment with agent
+                with torch.no_grad():
+                    action = get_epsilon_action(
+                        qnet, transform(state), epsilon, nr_actions)
 
+                new_state, reward, done, truncated, _ = env.step(action)
+                buffer.append(Experience(np.array(state),
+                              action, reward, done, new_state))
                 state = new_state
                 episode_return += (gamma ** t) * reward
 
                 # calculate training loss on sampled batch
                 if step_counter % train_frequency == 0:
                     states, actions, rewards, dones, next_states = buffer.sample(
-                        batch_size)
+                        batch_size,n_step=n_step)
                     if double_q_learning: 
                         qvalues = qnet.forward(transform(states))
                         qvalues = torch.gather(qvalues.squeeze(0), 1, torch.from_numpy(
@@ -246,7 +241,7 @@ def DQN(qnet, env, optimizer, start_epsilon=1, end_epsilon=0.05, exploration_fra
                 if step_counter % sync_rate == 0:
                     target_qnet.load_state_dict(qnet.state_dict())
 
-                if tau == T -1:
+                if done or truncated:
                     break
 
             episode_lengths.append(t+1)
