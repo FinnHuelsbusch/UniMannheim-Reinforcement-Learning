@@ -186,7 +186,7 @@ def DQN(qnet, env, optimizer, start_epsilon=1, end_epsilon=0.05, exploration_fra
                             qnet.forward(transform(n_step_buffer[-1].new_state)).max().item()
                     # add n step return to buffer
                     buffer.append(Experience(n_step_buffer[0].state,
-                                n_step_buffer[0].action, n_step_return, n_step_buffer[-1].done, n_step_buffer[-1].new_state))
+                                n_step_buffer[0].action, n_step_return, n_step_buffer[0].done, n_step_buffer[0].new_state))
 
                 state = new_state
                 episode_return += (gamma ** t) * reward
@@ -366,9 +366,7 @@ replay_buffer_size = 100000  # 1M is the DQN paper default
 # Dueling Network architecture
 model = Model(env.action_space.n, dueling=False).to(device)
 optimizer = torch.optim.Adam(model.parameters(), lr=0.0000625, eps=1.5e-4)
-dmodel = Model(env.action_space.n, dueling=False).to(device)
-doptimizer = torch.optim.Adam(dmodel.parameters(), lr=0.0000625, eps=1.5e-4)
 # optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
 # optimizer = torch.optim.RMSprop(model.parameters(), lr=1e-2)
 DQN(model, env, optimizer, gamma=gamma, start_epsilon=start_epsilon, end_epsilon=end_epsilon, exploration_fraction=exploration_fraction,
-    nr_episodes=nr_episodes, max_t=max_t, warm_start_steps=500, sync_rate=128, replay_buffer_size=replay_buffer_size, train_frequency=2, dqnet=dmodel, doptimizer=doptimizer, double_q_learning=False, n_step=6)
+    nr_episodes=nr_episodes, max_t=max_t, warm_start_steps=500, sync_rate=128, replay_buffer_size=replay_buffer_size, train_frequency=2, double_q_learning=False, n_step=6)
