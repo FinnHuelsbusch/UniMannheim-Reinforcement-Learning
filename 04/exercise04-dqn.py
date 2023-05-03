@@ -187,6 +187,8 @@ def DQN(qnet, env, optimizer, start_epsilon=1, end_epsilon=0.05, exploration_fra
                     new_state, reward, done, truncated, _ = env.step(action)
                     n_step_buffer.append(Experience(np.array(state),
                                 action, reward, done, new_state))
+                    if done or truncated:
+                        T = t + 1
                 tau = t - n_step + 1
                 if tau >= 0:
                     # calculate n step return
