@@ -143,27 +143,16 @@ def DQN(qnet, env, optimizer, start_epsilon=1, end_epsilon=0.05, exploration_fra
     start_time = time.time()
 
     # populate buffer
-    n_step_buffer = collections.deque(maxlen=n_step)
     state = reset(env)
     for i in range(warm_start_steps):
         action = random.randrange(nr_actions)
         new_state, reward, done, truncated, _ = env.step(action)
-        exp = Experience(state, action, reward, done or truncated, new_state)
-        n_step_buffer.append(exp)
-        if len(n_step_buffer) == n_step:
-            state = n_step_buffer[0].state
-            reward = sum([n_step_buffer[i].reward *
-                          gamma**i for i in range(n_step)])
-            new_state = n_step_buffer[-1].new_state
-            done = n_step_buffer[-1].done
-            exp = Experience(state, action, reward, done, new_state)
-            buffer.append(exp)
+        exp = Experience(state, action, reward, done, new_state)
+        buffer.append(exp)
         state = new_state
         if done or truncated:
-            n_step_buffer.clear()
             state = reset(env)
         if i % 10 == 0:
-            n_step_buffer.clear()
             state = reset(env)
 
     step_counter = 0
