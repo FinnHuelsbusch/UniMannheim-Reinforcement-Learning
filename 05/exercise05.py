@@ -91,17 +91,31 @@ class Agent(nn.Module):
         # - Use Tanh activation for all hidden layers
 
         # add critic: A fully connected NN with (n_states, 64) -> (64, 64) -> (64, 1), where n_states is the dimension of the observation space. 
-        self.critic = None
+        self.critic_fc1 = nn.Linear(env.observation_space.shape[0], 64)
+        layer_init(self.critic_fc1)
+        self.critic_fc2 = nn.Linear(64, 64)
+        layer_init(self.critic_fc2)
+        self.critic_fc3 = nn.Linear(64, 1)
+        layer_init(self.critic_fc3, std=1)
 
         # The actor will be parametrized by a Gaussian probability distribution.
         # add actor mean: A fully connected NN with (n_states, 64) -> (64, 64) -> (64, n_actions), where n_actions is the dimensionality of the action space
-        self.actor_mean = None
+        self.actor_fc1 = nn.Linear(env.observation_space.shape[0], 64)
+        layer_init(self.actor_fc1)
+        self.actor_fc2 = nn.Linear(64, 64)
+        layer_init(self.actor_fc2)
+        self.actor_fc3 = nn.Linear(64, env.action_space.shape)
+        layer_init(self.actor_fc3, std=0.01)
 
         #self.actor_logstd = nn.Parameter(torch.zeros(1, np.prod(env.action_space.shape)))
         # add actor variance. This is just a Parameter (a tensor whose values are learned) with n_actions elements. This will serve as a diagonal variance matrix for a Gaussian policy.
         self.actor_logstd = nn.Parameter(torch.zeros(np.prod(env.action_space.shape)))
-
+    
     def get_value(self, x):
+        # Critic network
+        critic_out = self.tanh(self.critic_fc1(state))
+        critic_out = self.tanh(self.critic_fc2(critic_out))
+        critic_out = self.critic_fc3(critic_out)
         return self.critic(x)
 
     def get_action_and_value(self, x, action=None):
@@ -114,7 +128,20 @@ class Agent(nn.Module):
         # (ii) the probability of the action given the state,
         # (iii) the entropy of the action distribution (can be obtained from the Normal class as well)
         # (iv) and the value of the state.
-        pass
+        
+        # Get output from actor network
+        actor_out = self.tanh(self.actor_fc1(state))
+        actor_out = self.tanh(self.actor_fc2(actor_out))
+        actor_out = torch.softmax(self.actor_fc3(actor_out), dim=-1)
+        
+        std = torch.exp(self.actor_logstd)
+        dist = Normal(actor_out, std)
+        if action is None:
+            action = dist.sample()
+        else: 
+            action = dist.log_prob(action)
+
+        return action, dist.log_prob(action), dist.entropy(), self.get_value(x)
 
 
 if __name__ == "__main__":
