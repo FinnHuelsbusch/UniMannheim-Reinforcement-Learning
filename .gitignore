@@ -128,3 +128,4 @@ dmypy.json
 # Pyre type checker
 .pyre/
 events.out.tfevents.*
+05/videos/

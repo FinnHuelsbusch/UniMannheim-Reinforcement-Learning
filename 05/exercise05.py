@@ -12,6 +12,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.distributions.normal import Normal
 from torch.utils.tensorboard import SummaryWriter
+from gymnasium.experimental.wrappers import RecordVideoV0
 
 
 def parse_args():
@@ -67,7 +68,7 @@ def make_env(env_id, capture_video, run_name, gamma):
     env = gym.wrappers.FlattenObservation(env)  # deal with dm_control's Dict observation space
     env = gym.wrappers.RecordEpisodeStatistics(env)
     if capture_video:
-        env = gym.wrappers.RecordVideo(env, f"videos/{run_name}", episode_trigger=lambda episode_id: episode_id % 50 == 0 and episode_id > 4200)
+        env = RecordVideoV0(env, f"videos/{run_name}", episode_trigger=lambda episode: episode % 100 == 0)
     env = gym.wrappers.ClipAction(env)
     env = gym.wrappers.NormalizeObservation(env)
     env = gym.wrappers.TransformObservation(env, lambda obs: np.clip(obs, -10, 10))
@@ -89,23 +90,24 @@ class Agent(nn.Module):
         # General:
         # - Use orthogonal initialization for weights and 0 initialization for biases using the layer_init function
         # - Use Tanh activation for all hidden layers
+        layers = []
+        layers.append(layer_init(nn.Linear(env.observation_space.shape[0], 64)))
+        layers.append(nn.Tanh())
+        layers.append(layer_init(nn.Linear(64, 64)))
+        layers.append(nn.Tanh())
+        layers.append(layer_init(nn.Linear(64, 1)))
+        self.critic = nn.Sequential(*layers)
 
-        # add critic: A fully connected NN with (n_states, 64) -> (64, 64) -> (64, 1), where n_states is the dimension of the observation space. 
-        self.critic_fc1 = nn.Linear(env.observation_space.shape[0], 64)
-        layer_init(self.critic_fc1)
-        self.critic_fc2 = nn.Linear(64, 64)
-        layer_init(self.critic_fc2)
-        self.critic_fc3 = nn.Linear(64, 1)
-        layer_init(self.critic_fc3, std=1)
 
         # The actor will be parametrized by a Gaussian probability distribution.
         # add actor mean: A fully connected NN with (n_states, 64) -> (64, 64) -> (64, n_actions), where n_actions is the dimensionality of the action space
-        self.actor_fc1 = nn.Linear(env.observation_space.shape[0], 64)
-        layer_init(self.actor_fc1)
-        self.actor_fc2 = nn.Linear(64, 64)
-        layer_init(self.actor_fc2)
-        self.actor_fc3 = nn.Linear(64, env.action_space.shape)
-        layer_init(self.actor_fc3, std=0.01)
+        layers = []
+        layers.append(layer_init(nn.Linear(env.observation_space.shape[0], 64)))
+        layers.append(nn.Tanh())
+        layers.append(layer_init(nn.Linear(64, 64)))
+        layers.append(nn.Tanh())
+        layers.append(layer_init(nn.Linear(64, env.action_space.shape[0])))
+        self.actor = nn.Sequential(*layers)
 
         #self.actor_logstd = nn.Parameter(torch.zeros(1, np.prod(env.action_space.shape)))
         # add actor variance. This is just a Parameter (a tensor whose values are learned) with n_actions elements. This will serve as a diagonal variance matrix for a Gaussian policy.
@@ -113,9 +115,6 @@ class Agent(nn.Module):
     
     def get_value(self, x):
         # Critic network
-        critic_out = self.tanh(self.critic_fc1(state))
-        critic_out = self.tanh(self.critic_fc2(critic_out))
-        critic_out = self.critic_fc3(critic_out)
         return self.critic(x)
 
     def get_action_and_value(self, x, action=None):
@@ -130,24 +129,20 @@ class Agent(nn.Module):
         # (iv) and the value of the state.
         
         # Get output from actor network
-        actor_out = self.tanh(self.actor_fc1(state))
-        actor_out = self.tanh(self.actor_fc2(actor_out))
-        actor_out = torch.softmax(self.actor_fc3(actor_out), dim=-1)
+        actor_out = self.actor(x)
         
         std = torch.exp(self.actor_logstd)
         dist = Normal(actor_out, std)
         if action is None:
             action = dist.sample()
-        else: 
-            action = dist.log_prob(action)
 
-        return action, dist.log_prob(action), dist.entropy(), self.get_value(x)
+        return action, dist.log_prob(action).sum(), dist.entropy(), self.get_value(x)
 
 
 if __name__ == "__main__":
     args = parse_args()
     run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
-    writer = SummaryWriter(f"runs/{run_name}")
+    writer = SummaryWriter(f"runs/PPO/{run_name}")
     writer.add_text(
         "hyperparameters",
         "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
@@ -229,9 +224,14 @@ if __name__ == "__main__":
         # Take care of the edge case at the end (i.e. first for the last step that is computed first) as well as whenever an episode was done.
         with torch.no_grad():
             advantages = torch.zeros_like(rewards)
-            # your code here: #
-            pass
-            ###################
+            advantages[-1] = rewards[-1] - values[-1]
+            for i in reversed(range(len(rewards) - 1)):
+                if dones[i]:
+                    delta = rewards[i] - values[i]
+                    advantages[i] = delta
+                else: 
+                    delta = rewards[i] + args.gamma * values[i+1] - values[i]
+                    advantages[i] = delta + (args.gamma * args.gae_lambda) * advantages[i+1]
             returns = advantages + values
 
         # Optimizing the policy and value network
@@ -256,13 +256,13 @@ if __name__ == "__main__":
                 mb_advantages = advantages[mb_inds]
 
                 # Policy loss
-                # TODO: compute the clipped surrogate objective for the policy.
-                pg_loss = None
+                # compute the clipped surrogate objective for the policy.
+                pg_loss = torch.min(ratio * mb_advantages, torch.clamp(ratio, 1.0 - args.clip_coef, 1.0 + args.clip_coef) * mb_advantages).mean()
 
                 # Value loss
                 newvalue = newvalue.view(-1)
                 # TODO: compute the value loss as the MSE between the new value and the returns
-                v_loss = pass
+                v_loss = nn.MSELoss()(newvalue, returns[mb_inds])
 
                 entropy_loss = entropy.mean()
                 loss = pg_loss - args.ent_coef * entropy_loss + v_loss * args.vf_coef
