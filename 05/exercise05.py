@@ -130,14 +130,16 @@ class Agent(nn.Module):
         
         # Get output from actor network
         actor_out = self.actor(x)
-        
-        std = torch.exp(self.actor_logstd)
+        action_logstd = self.actor_logstd.expand_as(actor_out)
+        std = torch.exp(action_logstd)
         dist = Normal(actor_out, std)
         if action is None:
             action = dist.sample()
 
-        return action, dist.log_prob(action).sum(), dist.entropy().sum(), self.get_value(x)
-
+        if x.dim() == 1:
+            return action, dist.log_prob(action).sum(), dist.entropy().sum(), self.get_value(x)
+        else:
+            return action, dist.log_prob(action).sum(1), dist.entropy().sum(1), self.get_value(x)
 
 if __name__ == "__main__":
     args = parse_args()
@@ -155,6 +157,7 @@ if __name__ == "__main__":
 
     # env setup
     env = make_env(args.env_id, args.capture_video, run_name, args.gamma)
+    env.reset(seed=args.seed)
     assert isinstance(env.action_space, gym.spaces.Box), "only continuous action space is supported"
 
     agent = Agent(env)
@@ -225,7 +228,7 @@ if __name__ == "__main__":
         with torch.no_grad():
             next_value = agent.get_value(next_obs)
             advantages = torch.zeros_like(rewards)
-            advantages[-1] = rewards[-1] + values[-1] * (1 - dones[-1]) - next_value[-1]
+            advantages[-1] = rewards[-1] + args.gamma*values[-1] * (1 - dones[-1]) - next_value[-1]
             for i in reversed(range(len(rewards) - 1)):
                 if dones[i]:
                     delta = rewards[i] - values[i]
