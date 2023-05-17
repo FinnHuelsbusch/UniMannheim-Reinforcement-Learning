@@ -261,7 +261,7 @@ if __name__ == "__main__":
 
                 # Policy loss
                 # compute the clipped surrogate objective for the policy.
-                pg_loss = torch.min(ratio * mb_advantages, torch.clamp(ratio, 1.0 - args.clip_coef, 1.0 + args.clip_coef) * mb_advantages).mean()
+                pg_loss = torch.min(ratio * mb_advantages, torch.clamp(ratio, 1.0 - args.clip_coef, 1.0 + args.clip_coef) * mb_advantages).mean() * -1
 
                 # Value loss
                 newvalue = newvalue.view(-1)
