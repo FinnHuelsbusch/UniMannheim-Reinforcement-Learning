@@ -136,7 +136,7 @@ class Agent(nn.Module):
         if action is None:
             action = dist.sample()
 
-        return action, dist.log_prob(action).sum(), dist.entropy(), self.get_value(x)
+        return action, dist.log_prob(action).sum(), dist.entropy().sum(), self.get_value(x)
 
 
 if __name__ == "__main__":
@@ -223,8 +223,9 @@ if __name__ == "__main__":
         # Use args.gamma and args.gae_lambda to compute the advantage.
         # Take care of the edge case at the end (i.e. first for the last step that is computed first) as well as whenever an episode was done.
         with torch.no_grad():
+            next_value = agent.get_value(next_obs)
             advantages = torch.zeros_like(rewards)
-            advantages[-1] = rewards[-1] - values[-1]
+            advantages[-1] = rewards[-1] + values[-1] * (1 - dones[-1]) - next_value[-1]
             for i in reversed(range(len(rewards) - 1)):
                 if dones[i]:
                     delta = rewards[i] - values[i]
