@@ -111,7 +111,7 @@ class Agent(nn.Module):
 
         #self.actor_logstd = nn.Parameter(torch.zeros(1, np.prod(env.action_space.shape)))
         # add actor variance. This is just a Parameter (a tensor whose values are learned) with n_actions elements. This will serve as a diagonal variance matrix for a Gaussian policy.
-        self.actor_logstd = nn.Parameter(torch.zeros(np.prod(env.action_space.shape)))
+        self.actor_logstd = nn.Parameter(torch.zeros(env.action_space.shape[0]))
     
     def get_value(self, x):
         # Critic network
@@ -129,10 +129,10 @@ class Agent(nn.Module):
         # (iv) and the value of the state.
         
         # Get output from actor network
-        actor_out = self.actor(x)
-        action_logstd = self.actor_logstd.expand_as(actor_out)
+        actor_mean = self.actor(x)
+        action_logstd = self.actor_logstd.expand_as(actor_mean)
         std = torch.exp(action_logstd)
-        dist = Normal(actor_out, std)
+        dist = Normal(actor_mean, std)
         if action is None:
             action = dist.sample()
 
@@ -157,7 +157,6 @@ if __name__ == "__main__":
 
     # env setup
     env = make_env(args.env_id, args.capture_video, run_name, args.gamma)
-    env.reset(seed=args.seed)
     assert isinstance(env.action_space, gym.spaces.Box), "only continuous action space is supported"
 
     agent = Agent(env)
@@ -228,7 +227,7 @@ if __name__ == "__main__":
         with torch.no_grad():
             next_value = agent.get_value(next_obs)
             advantages = torch.zeros_like(rewards)
-            advantages[-1] = rewards[-1] + args.gamma*values[-1] * (1 - dones[-1]) - next_value[-1]
+            advantages[-1] = rewards[-1] + args.gamma* next_value[-1] * (1 - next_done) - values[-1]
             for i in reversed(range(len(rewards) - 1)):
                 if dones[i]:
                     delta = rewards[i] - values[i]
